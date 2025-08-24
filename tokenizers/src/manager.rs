@@ -21,6 +21,7 @@ use std::fmt::Write;
 #[cfg(feature = "icu")]
 use crate::icu::ICUTokenizer;
 use crate::{
+    charabia::CharabiaTokenizer,
     cjk::ChineseTokenizer,
     code::CodeTokenizer,
     lindera::{LinderaChineseTokenizer, LinderaJapaneseTokenizer, LinderaKoreanTokenizer},
@@ -245,6 +246,7 @@ pub enum SearchTokenizer {
     #[strum(serialize = "icu")]
     ICUTokenizer(SearchTokenizerFilters),
     Jieba(SearchTokenizerFilters),
+    Charabia(SearchTokenizerFilters),
 }
 
 impl Default for SearchTokenizer {
@@ -292,6 +294,7 @@ impl SearchTokenizer {
             #[cfg(feature = "icu")]
             SearchTokenizer::ICUTokenizer(_filters) => json!({ "type": "icu" }),
             SearchTokenizer::Jieba(_filters) => json!({ "type": "jieba" }),
+            SearchTokenizer::Charabia(_filters) => json!({ "type": "charabia" }),
         };
 
         // Serialize filters to the enclosing json object.
@@ -361,6 +364,7 @@ impl SearchTokenizer {
             #[cfg(feature = "icu")]
             "icu" => Ok(SearchTokenizer::ICUTokenizer(filters)),
             "jieba" => Ok(SearchTokenizer::Jieba(filters)),
+            "charabia" => Ok(SearchTokenizer::Charabia(filters)),
             _ => Err(anyhow::anyhow!(
                 "unknown tokenizer type: {}",
                 tokenizer_type
@@ -530,6 +534,15 @@ impl SearchTokenizer {
                     .filter(filters.stopwords())
                     .build(),
             ),
+            SearchTokenizer::Charabia(filters) => Some(
+                TextAnalyzer::builder(CharabiaTokenizer::default())
+                    .filter(filters.remove_long_filter())
+                    .filter(filters.lower_caser())
+                    .filter(filters.stemmer())
+                    .filter(filters.stopwords_language())
+                    .filter(filters.stopwords())
+                    .build(),
+            ),
         }
     }
 
@@ -553,6 +566,7 @@ impl SearchTokenizer {
             #[cfg(feature = "icu")]
             SearchTokenizer::ICUTokenizer(filters) => filters,
             SearchTokenizer::Jieba(filters) => filters,
+            SearchTokenizer::Charabia(filters) => filters,
         }
     }
 }
@@ -617,6 +631,7 @@ impl SearchTokenizer {
             #[cfg(feature = "icu")]
             SearchTokenizer::ICUTokenizer(_filters) => format!("icu{filters_suffix}"),
             SearchTokenizer::Jieba(_filters) => format!("jieba{filters_suffix}"),
+            SearchTokenizer::Charabia(_filters) => format!("charabia{filters_suffix}"),
         }
     }
 }

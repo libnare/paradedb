@@ -29,6 +29,9 @@ concurrency:
   group: publish-github-release-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+
 jobs:
   publish-github-release:
     name: Publish ParadeDB GitHub Release
@@ -61,15 +64,15 @@ jobs:
           echo "Release check passed!"
 
           if [[ "${{ github.event.inputs.beta }}" == "true" ]]; then
-            echo "Validating that the version in Cargo.toml contains `-rc.X`..."
-            if [[ "${{ github.event.inputs.version }}" != *"-rc."* ]]; then
-              echo "Version (${{ github.event.inputs.version }}) does not contain `-rc.X` but is marked as a beta release."
+            echo "Validating that the version in Cargo.toml contains a pre-release tag..."
+            if [[ "${{ github.event.inputs.version }}" != *"-"* ]]; then
+              echo "Version (${{ github.event.inputs.version }}) does not contain a pre-release tag but is marked as a beta release."
               exit 1
             fi
           else
-            echo "Validating that the version in Cargo.toml does not contain `-rc.X`..."
-            if [[ "${{ github.event.inputs.version }}" == *"-rc."* ]]; then
-              echo "Version (${{ github.event.inputs.version }}) contains `-rc.X` but is not marked as a beta release."
+            echo "Validating that the version in Cargo.toml does not contain a pre-release tag..."
+            if [[ "${{ github.event.inputs.version }}" == *"-"* ]]; then
+              echo "Version (${{ github.event.inputs.version }}) contains a pre-release tag but is not marked as a beta release."
               exit 1
             fi
           fi
@@ -93,7 +96,7 @@ jobs:
       - name: Determine if Release Should be Marked as Latest
         id: release_latest
         env:
-          GITHUB_TOKEN: ${{ secrets.GHA_CREATE_RELEASE_PAT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Get the upcoming and current latest release tag (without the "v")
           current="${{ github.event.inputs.version }}"
@@ -115,9 +118,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ github.event.inputs.version }}
-          target_commitish: ${{ github.ref_name }} # Deploy the branch that this workflow is being run from
+          target_commitish: ${{ github.sha }} # Deploy the commit that this workflow is being run from
           prerelease: ${{ github.event.inputs.beta }} # Whether this release is a beta release
           make_latest: ${{ steps.release_latest.outputs.is_latest }}
-          generate_release_notes: true
+          generate_release_notes: false
         env:
-          GITHUB_TOKEN: ${{ secrets.GHA_CREATE_RELEASE_PAT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -24,6 +24,7 @@ concurrency:
 
 # Used by actions/attest-build-provenance to sign the builds
 permissions:
+  contents: write
   id-token: write
   attestations: write
 
@@ -31,7 +32,6 @@ jobs:
   publish-pg_search:
     name: Publish pg_search for PostgreSQL ${{ matrix.pg_version }} on ${{ matrix.name }} arm64
     runs-on: ${{ matrix.runner }}
-    if: ${{ !contains(github.ref, '-') }}
     strategy:
       matrix:
         include:
@@ -39,29 +39,29 @@ jobs:
           # https://docs.github.com/en/actions/using-github-hosted-runners/using-github-hosted-runners/about-github-hosted-runners#standard-github-hosted-runners-for-public-repositories
           # macOS 14 (Sonoma)
           - name: macOS 14 (Sonoma)
-            runner: macos-14
+            runner: warp-macos-14-arm64-6x
             pg_version: 14
           - name: macOS 14 (Sonoma)
-            runner: macos-14
+            runner: warp-macos-14-arm64-6x
             pg_version: 15
           - name: macOS 14 (Sonoma)
-            runner: macos-14
+            runner: warp-macos-14-arm64-6x
             pg_version: 16
           - name: macOS 14 (Sonoma)
-            runner: macos-14
+            runner: warp-macos-14-arm64-6x
             pg_version: 17
           # macOS 15 (Sequoia)
           - name: macOS 15 (Sequoia)
-            runner: macos-15
+            runner: warp-macos-15-arm64-6x
             pg_version: 14
           - name: macOS 15 (Sequoia)
-            runner: macos-15
+            runner: warp-macos-15-arm64-6x
             pg_version: 15
           - name: macOS 15 (Sequoia)
-            runner: macos-15
+            runner: warp-macos-15-arm64-6x
             pg_version: 16
           - name: macOS 15 (Sequoia)
-            runner: macos-15
+            runner: warp-macos-15-arm64-6x
             pg_version: 17
 
     steps:
@@ -200,11 +200,11 @@ jobs:
       - name: Retrieve GitHub Release Upload URL
         id: upload_url
         env:
-          GH_TOKEN: ${{ secrets.GHA_CREATE_RELEASE_PAT }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           RESPONSE=$(gh api \
             -H "Authorization: token $GH_TOKEN" \
-            /repos/paradedb/paradedb/releases/tags/v${{ steps.version.outputs.tag_version }})
+            /repos/${{ github.repository }}/releases/tags/v${{ steps.version.outputs.tag_version }})
           echo "REST API Response: $RESPONSE"
 
           UPLOAD_URL=$(echo "$RESPONSE" | jq -r '.upload_url' | sed 's/{.*}//')
@@ -214,7 +214,7 @@ jobs:
       - name: Upload pg_search .pkg to GitHub Release
         uses: shogo82148/actions-upload-release-asset@v1
         with:
-          github_token: ${{ secrets.GHA_CREATE_RELEASE_PAT }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           upload_url: ${{ steps.upload_url.outputs.upload_url }}
           asset_path: ./pg_search@${{ matrix.pg_version }}--${{ steps.version.outputs.tag_version }}.arm64_${{ steps.version.outputs.os_version }}.pkg
           asset_name: pg_search@${{ matrix.pg_version }}--${{ steps.version.outputs.tag_version }}.arm64_${{ steps.version.outputs.os_version }}.pkg

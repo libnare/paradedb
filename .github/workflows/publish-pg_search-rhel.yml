@@ -27,6 +27,7 @@ concurrency:
 
 # Used by actions/attest-build-provenance to sign the builds
 permissions:
+  contents: write
   id-token: write
   attestations: write
 
@@ -36,89 +37,88 @@ jobs:
     runs-on: ${{ matrix.runner }}
     container:
       image: ${{ matrix.image }}
-    if: ${{ !contains(github.ref, '-') }}
     strategy:
       matrix:
         include:
           # Red Hat Enterprise Linux 8
           - name: Red Hat Enterprise Linux 8
-            runner: ubicloud-standard-8
+            runner: warp-ubuntu-latest-x64-8x
             image: redhat/ubi8:latest
             pg_version: 14
             arch: x86_64
           - name: Red Hat Enterprise Linux 8
-            runner: ubicloud-standard-4-arm
+            runner: warp-ubuntu-latest-arm64-4x
             image: redhat/ubi8:latest
             pg_version: 14
             arch: aarch64
           - name: Red Hat Enterprise Linux 8
-            runner: ubicloud-standard-8
+            runner: warp-ubuntu-latest-x64-8x
             image: redhat/ubi8:latest
             pg_version: 15
             arch: x86_64
           - name: Red Hat Enterprise Linux 8
-            runner: ubicloud-standard-4-arm
+            runner: warp-ubuntu-latest-arm64-4x
             image: redhat/ubi8:latest
             pg_version: 15
             arch: aarch64
           - name: Red Hat Enterprise Linux 8
-            runner: ubicloud-standard-8
+            runner: warp-ubuntu-latest-x64-8x
             image: redhat/ubi8:latest
             pg_version: 16
             arch: x86_64
           - name: Red Hat Enterprise Linux 8
-            runner: ubicloud-standard-4-arm
+            runner: warp-ubuntu-latest-arm64-4x
             image: redhat/ubi8:latest
             pg_version: 16
             arch: aarch64
           - name: Red Hat Enterprise Linux 8
-            runner: ubicloud-standard-8
+            runner: warp-ubuntu-latest-x64-8x
             image: redhat/ubi8:latest
             pg_version: 17
             arch: x86_64
           - name: Red Hat Enterprise Linux 8
-            runner: ubicloud-standard-4-arm
+            runner: warp-ubuntu-latest-arm64-4x
             image: redhat/ubi8:latest
             pg_version: 17
             arch: aarch64
           # Red Hat Enterprise Linux 9
           - name: Red Hat Enterprise Linux 9
-            runner: ubicloud-standard-8
+            runner: warp-ubuntu-latest-x64-8x
             image: redhat/ubi9:latest
             pg_version: 14
             arch: x86_64
           - name: Red Hat Enterprise Linux 9
-            runner: ubicloud-standard-4-arm
+            runner: warp-ubuntu-latest-arm64-4x
             image: redhat/ubi9:latest
             pg_version: 14
             arch: aarch64
           - name: Red Hat Enterprise Linux 9
-            runner: ubicloud-standard-8
+            runner: warp-ubuntu-latest-x64-8x
             image: redhat/ubi9:latest
             pg_version: 15
             arch: x86_64
           - name: Red Hat Enterprise Linux 9
-            runner: ubicloud-standard-4-arm
+            runner: warp-ubuntu-latest-arm64-4x
             image: redhat/ubi9:latest
             pg_version: 15
             arch: aarch64
           - name: Red Hat Enterprise Linux 9
-            runner: ubicloud-standard-8
+            runner: warp-ubuntu-latest-x64-8x
             image: redhat/ubi9:latest
             pg_version: 16
             arch: x86_64
           - name: Red Hat Enterprise Linux 9
-            runner: ubicloud-standard-4-arm
+            runner: warp-ubuntu-latest-arm64-4x
             image: redhat/ubi9:latest
             pg_version: 16
             arch: aarch64
           - name: Red Hat Enterprise Linux 9
-            runner: ubicloud-standard-8
+            runner: warp-ubuntu-latest-x64-8x
             image: redhat/ubi9:latest
             pg_version: 17
             arch: x86_64
           - name: Red Hat Enterprise Linux 9
-            runner: ubicloud-standard-4-arm
+            runner: warp-ubuntu-latest-arm64-4x
             image: redhat/ubi9:latest
             pg_version: 17
             arch: aarch64
@@ -244,16 +244,36 @@ jobs:
           cargo pgrx package --pg-config $PG_CONFIG_PATH
 
       - name: Create .rpm Package
+        id: rpm_builder
         run: |
           echo "Configuring RPM build environment..."
           rpmdev-setuptree
+          
+          TAG_VERSION="${{ steps.version.outputs.tag_version }}"
+          
+          if [[ "$TAG_VERSION" == *-* ]]; then
+            RPM_VERSION=$(echo "$TAG_VERSION" | cut -d'-' -f1)
+            PRE_RELEASE=$(echo "$TAG_VERSION" | cut -d'-' -f2)
+            RPM_RELEASE_FOR_SPEC="0.${PRE_RELEASE}%{?dist}"
+            RPM_RELEASE_FOR_FILENAME="0.${PRE_RELEASE}.${{ steps.version.outputs.os_version }}"
+          else
+            RPM_VERSION="$TAG_VERSION"
+            RPM_RELEASE_FOR_SPEC="1%{?dist}"
+            RPM_RELEASE_FOR_FILENAME="1.${{ steps.version.outputs.os_version }}"
+          fi
 
+          echo "rpm_version=${RPM_VERSION}" >> $GITHUB_OUTPUT
+          echo "rpm_release_filename=${RPM_RELEASE_FOR_FILENAME}" >> $GITHUB_OUTPUT
+          
+          echo "RPM Version set to: ${RPM_VERSION}"
+          echo "RPM Release for Filename set to: ${RPM_RELEASE_FOR_FILENAME}"
+          
           echo "Creating RPM SPEC file..."
           spec_file=~/rpmbuild/SPECS/pg_search.spec
           cat <<EOF > $spec_file
           Name:           pg_search_${{ matrix.pg_version }}
-          Version:        ${{ steps.version.outputs.tag_version }}
-          Release:        1%{?dist}
+          Version:        ${RPM_VERSION}
+          Release:        ${RPM_RELEASE_FOR_SPEC}
           Summary:        Full-text search for PostgreSQL using BM25
           License:        GNU Affero General Public License v3.0
           URL:            https://github.com/paradedb/paradedb
@@ -296,16 +316,16 @@ jobs:
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: |
-            ~/rpmbuild/RPMS/${{ matrix.arch }}/pg_search_${{ matrix.pg_version }}-${{ steps.version.outputs.tag_version }}-1.${{ steps.version.outputs.os_version }}.${{ matrix.arch }}.rpm
+            ~/rpmbuild/RPMS/${{ matrix.arch }}/pg_search_${{ matrix.pg_version }}-${{ steps.rpm_builder.outputs.rpm_version }}-${{ steps.rpm_builder.outputs.rpm_release_filename }}.${{ matrix.arch }}.rpm
 
       - name: Retrieve GitHub Release Upload URL
         id: upload_url
         env:
-          GH_TOKEN: ${{ secrets.GHA_CREATE_RELEASE_PAT }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           RESPONSE=$(gh api \
             -H "Authorization: token $GH_TOKEN" \
-            /repos/paradedb/paradedb/releases/tags/v${{ steps.version.outputs.tag_version }})
+            /repos/${{ github.repository }}/releases/tags/v${{ steps.version.outputs.tag_version }})
           echo "REST API Response: $RESPONSE"
 
           UPLOAD_URL=$(echo "$RESPONSE" | jq -r '.upload_url' | sed 's/{.*}//')
@@ -315,8 +335,8 @@ jobs:
       - name: Upload pg_search .rpm to GitHub Release
         uses: shogo82148/actions-upload-release-asset@v1
         with:
-          github_token: ${{ secrets.GHA_CREATE_RELEASE_PAT }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           upload_url: ${{ steps.upload_url.outputs.upload_url }}
-          asset_path: ~/rpmbuild/RPMS/${{ matrix.arch }}/pg_search_${{ matrix.pg_version }}-${{ steps.version.outputs.tag_version }}-1.${{ steps.version.outputs.os_version }}.${{ matrix.arch }}.rpm
+          asset_path: ~/rpmbuild/RPMS/${{ matrix.arch }}/pg_search_${{ matrix.pg_version }}-${{ steps.rpm_builder.outputs.rpm_version }}-${{ steps.rpm_builder.outputs.rpm_release_filename }}.${{ matrix.arch }}.rpm
           asset_name: pg_search_${{ matrix.pg_version }}-${{ steps.version.outputs.tag_version }}-1PARADEDB.${{ steps.version.outputs.os_version }}.${{ matrix.arch }}.rpm
           overwrite: true
